@@ -2,9 +2,10 @@ from fastapi import APIRouter, Depends, Query, status
 
 from exceptions import ApiHTTPException, ObjectNotFoundException
 from models.places import Place
-from schemas.places import PlaceResponse, PlacesListResponse, PlaceUpdate
+from schemas.places import PlaceResponse, PlaceUpdate
 from schemas.routes import MetadataTag
 from services.places_service import PlacesService
+from fastapi_pagination import Page, paginate
 
 router = APIRouter()
 
@@ -18,14 +19,14 @@ tag_places = MetadataTag(
 @router.get(
     "",
     summary="Получение списка объектов",
-    response_model=PlacesListResponse,
+    response_model=Page[Place],
 )
 async def get_list(
     limit: int = Query(
         20, gt=0, le=100, description="Ограничение на количество объектов в выборке"
     ),
     places_service: PlacesService = Depends(),
-) -> PlacesListResponse:
+) -> Page[Place]:
     """
     Получение списка любимых мест.
 
@@ -34,7 +35,7 @@ async def get_list(
     :return:
     """
 
-    return PlacesListResponse(data=await places_service.get_places_list(limit=limit))
+    return paginate(await places_service.get_places_list(limit=limit))
 
 
 @router.get(
