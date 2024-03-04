@@ -1,14 +1,15 @@
-from fastapi import APIRouter, Depends, Query, status
+import geocoder
+from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi_pagination import Page, paginate
+from geocoder.ipinfo import IpinfoQuery
 
 from exceptions import ApiHTTPException, ObjectNotFoundException
 from models.places import Place
-from schemas.places import PlaceResponse, PlaceUpdate
+from schemas.places import DescriptionRequest, PlaceResponse, PlaceUpdate
 from schemas.routes import MetadataTag
 from services.places_service import PlacesService
-from fastapi_pagination import Page, paginate
 
 router = APIRouter()
-
 
 tag_places = MetadataTag(
     name="places",
@@ -128,22 +129,35 @@ async def delete(primary_key: int, places_service: PlacesService = Depends()) ->
 
 
 @router.post(
-    "",
+    "/auto",
     summary="Создание нового объекта с автоматическим определением координат",
     response_model=PlaceResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def create_auto() -> PlaceResponse:
+async def create_auto(
+    request: Request,
+    description: DescriptionRequest,
+    places_service: PlacesService = Depends(),
+) -> PlaceResponse:
     """
     Создание нового объекта любимого места с автоматическим определением координат.
 
     :return:
     """
+    geo_info: IpinfoQuery = geocoder.ip("me")
 
-    # Пример:
-    #
-    # import geocoder
-    # from geocoder.ipinfo import IpinfoQuery
-    #
-    # g: IpinfoQuery = geocoder.ip('me')
-    # print(g.latlng)
+    if geo_info.latlng:
+        latitude, longitude = geo_info.latlng
+        place = Place(
+            description=description.description,
+            longitude=longitude,
+            latitude=latitude,
+        )
+
+        if primary_key := await places_service.create_place(place):
+            return PlaceResponse(data=await places_service.get_place(primary_key))
+
+    raise ApiHTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail="Объект не был создан",
+    )
